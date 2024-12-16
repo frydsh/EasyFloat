@@ -32,8 +32,7 @@ class EasyFloat {
          * @return  浮窗属性构建者
          */
         @JvmStatic
-        fun with(activity: Context): Builder = if (activity is Activity) Builder(activity)
-        else Builder(LifecycleUtils.getTopActivity() ?: activity)
+        fun with(activity: Context): Builder = Builder(activity)
 
         /**
          * 关闭当前浮窗
@@ -70,6 +69,9 @@ class EasyFloat {
         @JvmOverloads
         fun dragEnable(dragEnable: Boolean, tag: String? = null) =
             getConfig(tag)?.let { it.dragEnable = dragEnable }
+
+        fun setAnimator(floatAnimator: OnFloatAnimator?, tag: String? = null) =
+            getConfig(tag)?.let { it.floatAnimator = floatAnimator }
 
         /**
          * 获取当前浮窗是否显示，通过浮窗的config，获取显示状态
@@ -184,6 +186,8 @@ class EasyFloat {
          */
         fun setSidePattern(sidePattern: SidePattern) = apply { config.sidePattern = sidePattern }
 
+        fun sideAnimByStartEdge(byStartEdge: Boolean) = apply { config.sideAnimByStartEdge = byStartEdge }
+
         /**
          * 设置浮窗的显示模式
          * @param showPattern   浮窗显示模式
@@ -250,10 +254,10 @@ class EasyFloat {
          */
         @JvmOverloads
         fun setBorder(
-            left: Int = 0,
-            top: Int = -DisplayUtils.getStatusBarHeight(activity),
-            right: Int = DisplayUtils.getScreenWidth(activity),
-            bottom: Int = DisplayUtils.getScreenHeight(activity)
+            left: Int,
+            top: Int,
+            right: Int,
+            bottom: Int
         ) = apply {
             config.leftBorder = left
             config.topBorder = top

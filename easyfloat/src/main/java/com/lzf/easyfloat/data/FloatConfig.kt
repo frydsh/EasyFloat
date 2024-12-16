@@ -37,6 +37,7 @@ data class FloatConfig(
 
     // 浮窗的吸附方式（默认不吸附，拖到哪里是哪里）
     var sidePattern: SidePattern = SidePattern.DEFAULT,
+    var sideAnimByStartEdge : Boolean = false,
 
     // 浮窗显示类型（默认只在当前页显示）
     var showPattern: ShowPattern = ShowPattern.CURRENT_ACTIVITY,
@@ -55,7 +56,7 @@ data class FloatConfig(
 
     // 四周边界值
     var leftBorder: Int = 0,
-    var topBorder: Int = -999,
+    var topBorder: Int = 0,
     var rightBorder: Int = 9999,
     var bottomBorder: Int = 9999,
 

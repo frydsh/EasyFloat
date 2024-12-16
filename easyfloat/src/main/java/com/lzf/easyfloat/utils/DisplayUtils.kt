@@ -7,6 +7,7 @@ import android.graphics.Point
 import android.os.Build
 import android.provider.Settings
 import android.util.DisplayMetrics
+import android.view.Surface
 import android.view.View
 import android.view.WindowManager
 import com.lzf.easyfloat.permission.rom.RomUtils
@@ -41,18 +42,9 @@ object DisplayUtils {
     }
 
     /**
-     * 获取屏幕宽度（显示宽度，横屏的时候可能会小于物理像素值）
+     * 获取屏幕宽度（物理像素值的宽度）
      */
-    fun getScreenWidth(context: Context): Int {
-        val manager = context.getSystemService(Context.WINDOW_SERVICE) as WindowManager
-        val metrics = DisplayMetrics()
-        manager.defaultDisplay.getRealMetrics(metrics)
-        return if (context.resources.configuration.orientation == Configuration.ORIENTATION_PORTRAIT) {
-            metrics.widthPixels
-        } else {
-            metrics.widthPixels - getNavigationBarCurrentHeight(context)
-        }
-    }
+    fun getScreenWidth(context: Context) = getScreenSize(context).x
 
     /**
      * 获取屏幕高度（物理像素值的高度）
@@ -114,12 +106,49 @@ object DisplayUtils {
     }
 
     /**
+     * 不包含导航栏的有效宽度（没有导航栏，或者已去除导航栏的高度）
+     */
+    fun rejectedNavWidth(context: Context): Int {
+        val point = Point()
+        val windowManager = context.getSystemService(Service.WINDOW_SERVICE) as WindowManager
+        val display = windowManager.defaultDisplay
+        display.getSize(point)
+        return if (display.rotation == Surface.ROTATION_0 || display.rotation == Surface.ROTATION_180) {
+            if (context.resources.configuration.orientation == Configuration.ORIENTATION_PORTRAIT) {
+                point.x
+            } else {
+                point.y
+            }
+        } else {
+            if (context.resources.configuration.orientation == Configuration.ORIENTATION_LANDSCAPE) {
+                point.x
+            } else {
+                point.y
+            }
+        }
+    }
+
+    /**
      * 不包含导航栏的有效高度（没有导航栏，或者已去除导航栏的高度）
      */
     fun rejectedNavHeight(context: Context): Int {
-        val point = getScreenSize(context)
-        if (point.x > point.y) return point.y
-        return point.y - getNavigationBarCurrentHeight(context)
+        val point = Point()
+        val windowManager = context.getSystemService(Service.WINDOW_SERVICE) as WindowManager
+        val display = windowManager.defaultDisplay
+        display.getSize(point)
+        return if (display.rotation == Surface.ROTATION_0 || display.rotation == Surface.ROTATION_180) {
+            if (context.resources.configuration.orientation == Configuration.ORIENTATION_PORTRAIT) {
+                point.y
+            } else {
+                point.x
+            }
+        } else {
+            if (context.resources.configuration.orientation == Configuration.ORIENTATION_LANDSCAPE) {
+                point.y
+            } else {
+                point.x
+            }
+        }
     }
 
     /**
@@ -166,9 +195,6 @@ object DisplayUtils {
         d.getMetrics(displayMetrics)
         val displayHeight = displayMetrics.heightPixels
         val displayWidth = displayMetrics.widthPixels
-
-        // 部分无良厂商的手势操作，显示高度 + 导航栏高度，竟然大于物理高度，对于这种情况，直接默认未启用导航栏
-        if (displayHeight + getNavigationBarHeight(context) > realHeight) return false
 
         return realWidth - displayWidth > 0 || realHeight - displayHeight > 0
     }

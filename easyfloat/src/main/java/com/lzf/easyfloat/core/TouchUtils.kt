@@ -2,9 +2,11 @@ package com.lzf.easyfloat.core
 
 import android.animation.Animator
 import android.animation.ValueAnimator
+import android.app.Service
 import android.content.Context
 import android.graphics.Rect
 import android.view.MotionEvent
+import android.view.Surface
 import android.view.View
 import android.view.WindowManager
 import android.view.WindowManager.LayoutParams
@@ -12,7 +14,6 @@ import com.lzf.easyfloat.data.FloatConfig
 import com.lzf.easyfloat.enums.ShowPattern
 import com.lzf.easyfloat.enums.SidePattern
 import com.lzf.easyfloat.utils.DisplayUtils
-import kotlin.math.max
 import kotlin.math.min
 
 /**
@@ -38,6 +39,7 @@ internal class TouchUtils(val context: Context, val config: FloatConfig) {
     // 起点坐标
     private var lastX = 0f
     private var lastY = 0f
+    private var lastPointer = 0
 
     // 浮窗各边距离父布局的距离
     private var leftDistance = 0
@@ -53,6 +55,8 @@ internal class TouchUtils(val context: Context, val config: FloatConfig) {
 
     // 屏幕可用高度 - 浮窗自身高度 的剩余高度
     private var emptyHeight = 0
+
+    private var downHandled = false
 
     /**
      * 根据吸附模式，实现相应的拖拽效果
@@ -73,15 +77,32 @@ internal class TouchUtils(val context: Context, val config: FloatConfig) {
 
         when (event.action and MotionEvent.ACTION_MASK) {
             MotionEvent.ACTION_DOWN -> {
+                downHandled = true
                 config.isDrag = false
                 // 记录触摸点的位置
                 lastX = event.rawX
                 lastY = event.rawY
+                lastPointer = event.getPointerId(event.actionIndex)
                 // 初始化一些边界数据
                 initBoarderValue(view, params)
             }
 
             MotionEvent.ACTION_MOVE -> {
+                if (!downHandled) {
+                    downHandled = true
+                    config.isDrag = false
+                    // 记录触摸点的位置
+                    lastX = event.rawX
+                    lastY = event.rawY
+                    lastPointer = event.getPointerId(event.actionIndex)
+                    // 初始化一些边界数据
+                    initBoarderValue(view, params)
+                }
+                if (lastPointer != event.getPointerId(event.actionIndex)) {
+                    lastX = event.rawX
+                    lastY = event.rawY
+                    lastPointer = event.getPointerId(event.actionIndex)
+                }
                 // 过滤边界值之外的拖拽
                 if (event.rawX < leftBorder || event.rawX > rightBorder + view.width
                     || event.rawY < topBorder || event.rawY > bottomBorder + view.height
@@ -111,10 +132,6 @@ internal class TouchUtils(val context: Context, val config: FloatConfig) {
 
                 y = when {
                     y < topBorder -> topBorder
-                    // 状态栏沉浸时，最小高度为-statusBarHeight，反之最小高度为0
-                    y < 0 -> if (config.immersionStatusBar) {
-                        if (y < -statusBarHeight) -statusBarHeight else y
-                    } else 0
                     y > bottomBorder -> bottomBorder
                     else -> y
                 }
@@ -162,6 +179,7 @@ internal class TouchUtils(val context: Context, val config: FloatConfig) {
             }
 
             MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                downHandled = false
                 if (!config.isDrag) return
                 // 回调拖拽事件的ACTION_UP
                 config.callbacks?.drag(view, event)
@@ -201,24 +219,37 @@ internal class TouchUtils(val context: Context, val config: FloatConfig) {
      * 初始化边界值等数据
      */
     private fun initBoarderValue(view: View, params: LayoutParams) {
-        // 屏幕宽高需要每次获取，可能会有屏幕旋转、虚拟导航栏的状态变化
-        parentWidth = DisplayUtils.getScreenWidth(context)
-        parentHeight = config.displayHeight.getDisplayRealHeight(context)
         // 获取在整个屏幕内的绝对坐标
         view.getLocationOnScreen(location)
         // 通过绝对高度和相对高度比较，判断包含顶部状态栏
         statusBarHeight = if (location[1] > params.y) statusBarHeight(view) else 0
+        // 屏幕宽高需要每次获取，可能会有屏幕旋转、虚拟导航栏的状态变化
+        parentWidth = if (config.immersionStatusBar) {
+            DisplayUtils.getScreenWidth(context)
+        } else {
+            DisplayUtils.rejectedNavWidth(context)
+        }
+        parentHeight = if (config.immersionStatusBar) {
+            DisplayUtils.getScreenHeight(context)
+        } else {
+            val windowManager = context.getSystemService(Service.WINDOW_SERVICE) as WindowManager
+            val display = windowManager.defaultDisplay
+            if (display.rotation == Surface.ROTATION_0 || display.rotation == Surface.ROTATION_180) {
+                DisplayUtils.getScreenHeight(context) - DisplayUtils.getNavigationBarCurrentHeight(context)
+            } else {
+                DisplayUtils.rejectedNavHeight(context)
+            }
+        }
         emptyHeight = parentHeight - view.height - statusBarHeight
 
-        leftBorder = max(0, config.leftBorder)
-        rightBorder = min(parentWidth, config.rightBorder) - view.width
+        leftBorder = config.leftBorder
+        rightBorder = min(parentWidth, config.rightBorder) - if (config.sideAnimByStartEdge) 0 else view.width
         topBorder = if (config.showPattern == ShowPattern.CURRENT_ACTIVITY) {
             // 单页面浮窗，坐标屏幕顶部计算
             if (config.immersionStatusBar) config.topBorder
             else config.topBorder + statusBarHeight(view)
         } else {
-            // 系统浮窗，坐标从状态栏底部开始，沉浸时坐标为负
-            if (config.immersionStatusBar) config.topBorder - statusBarHeight(view) else config.topBorder
+            config.topBorder
         }
         bottomBorder = if (config.showPattern == ShowPattern.CURRENT_ACTIVITY) {
             // 单页面浮窗，坐标屏幕顶部计算
@@ -227,11 +258,7 @@ internal class TouchUtils(val context: Context, val config: FloatConfig) {
             else
                 min(emptyHeight, config.bottomBorder + statusBarHeight(view) - view.height)
         } else {
-            // 系统浮窗，坐标从状态栏底部开始，沉浸时坐标为负
-            if (config.immersionStatusBar)
-                min(emptyHeight, config.bottomBorder - statusBarHeight(view) - view.height)
-            else
-                min(emptyHeight, config.bottomBorder - view.height)
+            min(emptyHeight, config.bottomBorder - view.height)
         }
     }
 
